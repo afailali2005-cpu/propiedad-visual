@@ -14,7 +14,102 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          actualizado_en: string
+          creado_en: string
+          id: string
+          nombre: string | null
+          periodo_inicio: string
+          plan: string
+          stripe_customer_id: string | null
+          tours_usados_mes: number
+          videos_usados_mes: number
+        }
+        Insert: {
+          actualizado_en?: string
+          creado_en?: string
+          id: string
+          nombre?: string | null
+          periodo_inicio?: string
+          plan?: string
+          stripe_customer_id?: string | null
+          tours_usados_mes?: number
+          videos_usados_mes?: number
+        }
+        Update: {
+          actualizado_en?: string
+          creado_en?: string
+          id?: string
+          nombre?: string | null
+          periodo_inicio?: string
+          plan?: string
+          stripe_customer_id?: string | null
+          tours_usados_mes?: number
+          videos_usados_mes?: number
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          actualizado_en: string
+          archivos_entrada: Json
+          creado_en: string
+          error_mensaje: string | null
+          estado: string
+          id: string
+          miniatura_url: string | null
+          nombre: string
+          tipo: string
+          url_resultado: string | null
+          user_id: string
+        }
+        Insert: {
+          actualizado_en?: string
+          archivos_entrada?: Json
+          creado_en?: string
+          error_mensaje?: string | null
+          estado?: string
+          id?: string
+          miniatura_url?: string | null
+          nombre: string
+          tipo: string
+          url_resultado?: string | null
+          user_id: string
+        }
+        Update: {
+          actualizado_en?: string
+          archivos_entrada?: Json
+          creado_en?: string
+          error_mensaje?: string | null
+          estado?: string
+          id?: string
+          miniatura_url?: string | null
+          nombre?: string
+          tipo?: string
+          url_resultado?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      waitlist: {
+        Row: {
+          creado_en: string
+          email: string
+          id: string
+        }
+        Insert: {
+          creado_en?: string
+          email: string
+          id?: string
+        }
+        Update: {
+          creado_en?: string
+          email?: string
+          id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
