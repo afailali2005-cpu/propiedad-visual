@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Camera, Sparkles, Upload, X } from "lucide-react";
+import { Camera, Download, Sparkles, Upload, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -129,6 +129,33 @@ function NuevoProyecto() {
           texto="Sube el escaneo del móvil (.ply, .spz o .splat)."
         />
       </div>
+      {tipo === "tour3d" && (
+        <div className="surface-card mt-4 flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            ¿Todavía no tienes la app de escaneo? Descárgala gratis:
+          </p>
+          <div className="flex shrink-0 gap-2">
+            <Button asChild variant="outline" size="sm">
+              <a
+                href="https://apps.apple.com/us/app/scaniverse-3d-scanner/id1541433223"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Download className="h-4 w-4" /> iOS
+              </a>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <a
+                href="https://play.google.com/store/apps/details?id=com.nianticlabs.scaniverse"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Download className="h-4 w-4" /> Android
+              </a>
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="mt-6">
         <Label htmlFor="nombre">Nombre de la propiedad</Label>
