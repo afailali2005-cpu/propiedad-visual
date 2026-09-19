@@ -34,7 +34,7 @@ function acotar(v: number) {
   return Math.max(-10, Math.min(10, v));
 }
 
-/** Slider bipolar (-10..10) con "estela" de segmentos hacia el valor actual, al estilo Rendy. */
+/** Slider bipolar (-10..10) con "estela" de segmentos y valor editable al hacer clic. */
 function SliderBipolar({
   label,
   value,
@@ -46,6 +46,19 @@ function SliderBipolar({
   onChange: (v: number) => void;
   disabled?: boolean;
 }) {
+  const [editando, setEditando] = useState(false);
+  const [texto, setTexto] = useState(value.toFixed(1));
+
+  useEffect(() => {
+    if (!editando) setTexto(value.toFixed(1));
+  }, [value, editando]);
+
+  function confirmar() {
+    const n = Number(texto.replace(",", "."));
+    if (!Number.isNaN(n)) onChange(acotar(n));
+    setEditando(false);
+  }
+
   const pct = ((value + 10) / 20) * 100;
   const pasos = Math.min(5, Math.round(Math.abs(value) / 2));
   const dir = value >= 0 ? 1 : -1;
@@ -54,7 +67,34 @@ function SliderBipolar({
     <div>
       <div className="flex items-center justify-between text-sm">
         <span className="text-muted-foreground">{label}</span>
-        <span className="font-medium tabular-nums">{value.toFixed(1)}</span>
+        {editando ? (
+          <input
+            type="number"
+            step={0.1}
+            min={-10}
+            max={10}
+            value={texto}
+            autoFocus
+            disabled={disabled}
+            onChange={(e) => setTexto(e.target.value)}
+            onBlur={confirmar}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") confirmar();
+              if (e.key === "Escape") setEditando(false);
+            }}
+            className="w-16 rounded border border-clay bg-card px-1.5 py-0.5 text-right text-sm tabular-nums outline-none"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => !disabled && setEditando(true)}
+            disabled={disabled}
+            className="rounded px-1 font-medium tabular-nums hover:bg-clay/10 disabled:hover:bg-transparent"
+            title="Haz clic para escribir el valor exacto"
+          >
+            {value.toFixed(1)}
+          </button>
+        )}
       </div>
       <div className="relative mt-1.5 h-9 w-full overflow-hidden rounded-lg border border-border bg-clay/5">
         {Array.from({ length: pasos }).map((_, i) => (
@@ -203,40 +243,50 @@ function VisorEncuadre({
   );
 }
 
+/**
+ * Componente controlado: el padre guarda los valores de cámara de CADA foto
+ * (para poder editar varias sin perder lo ya ajustado al cambiar de foto).
+ */
 export function CameraEditor({
   archivo,
+  camera,
+  onCameraChange,
   generando,
-  onAplicar,
+  etiquetaBoton,
+  onSubmit,
 }: {
   archivo: File;
+  camera: CameraValues;
+  onCameraChange: (c: CameraValues) => void;
   generando: boolean;
-  onAplicar: (camera: CameraValues) => void;
+  etiquetaBoton: string;
+  onSubmit: () => void;
 }) {
-  const [camera, setCamera] = useState<CameraValues>(CAMARA_INICIAL);
   const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const nuevaUrl = URL.createObjectURL(archivo);
     setUrl(nuevaUrl);
-    setCamera(CAMARA_INICIAL);
     return () => URL.revokeObjectURL(nuevaUrl);
   }, [archivo]);
 
-  function set<K extends keyof CameraValues>(key: K, value: number) {
-    setCamera((c) => ({ ...c, [key]: value }));
-  }
-
   return (
     <div className="surface-card grid gap-6 p-5 md:grid-cols-[1.2fr_1fr]">
-      {url && <VisorEncuadre url={url} camera={camera} onCamera={setCamera} disabled={generando} />}
+      {url && <VisorEncuadre url={url} camera={camera} onCamera={onCameraChange} disabled={generando} />}
       <div className="flex flex-col">
         <div className="grid grid-cols-2 gap-x-4 gap-y-5">
           {CAMPOS.map((c) => (
-            <SliderBipolar key={c.key} label={c.label} value={camera[c.key]} disabled={generando} onChange={(v) => set(c.key, v)} />
+            <SliderBipolar
+              key={c.key}
+              label={c.label}
+              value={camera[c.key]}
+              disabled={generando}
+              onChange={(v) => onCameraChange({ ...camera, [c.key]: v })}
+            />
           ))}
         </div>
-        <Button variant="clay" size="xl" className="mt-6 w-full" disabled={generando} onClick={() => onAplicar(camera)}>
-          {generando ? "Generando…" : "Aplicar movimiento"}
+        <Button variant="clay" size="xl" className="mt-6 w-full" disabled={generando} onClick={onSubmit}>
+          {generando ? "Generando…" : etiquetaBoton}
         </Button>
       </div>
     </div>

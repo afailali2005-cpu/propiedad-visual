@@ -16,6 +16,10 @@ const camaraSchema = z.object({
 });
 
 const entradaEditor = z.object({ project_id: z.string().uuid(), camera: camaraSchema });
+const entradaEditorMulti = z.object({
+  project_id: z.string().uuid(),
+  camaras: z.array(camaraSchema).min(1).max(12),
+});
 
 type Perfil = {
   plan: PlanId;
@@ -208,7 +212,7 @@ export const generarVideo = createServerFn({ method: "POST" })
     }
   });
 
-/** Genera un único clip a partir de la foto del proyecto y los 6 valores del editor de cámara (modo Editor). */
+/** Genera un único clip a partir de la foto del proyecto y los 6 valores del editor de cámara (una sola foto). */
 export const generarClipEditor = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => entradaEditor.parse(data))
@@ -250,6 +254,70 @@ export const generarClipEditor = createServerFn({ method: "POST" })
 
       await sumarUso(supabase, userId, perfil, "video");
       return { ok: true as const, url: clip.url };
+    } catch (e) {
+      const mensaje = e instanceof Error ? e.message : "Error desconocido al generar el vídeo.";
+      await marcarError(supabase, proyecto.id, mensaje);
+      throw new Error(mensaje);
+    }
+  });
+
+/**
+ * Genera un vídeo a partir de VARIAS fotos del proyecto, cada una con sus
+ * propios 6 valores de cámara (modo Editor multi-foto). `camaras[i]`
+ * corresponde a `archivos_entrada[i]` en el mismo orden en que se subieron.
+ */
+export const generarVideoConCamaras = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => entradaEditorMulti.parse(data))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context as any;
+
+    const { data: proyecto, error } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", data.project_id)
+      .maybeSingle();
+    if (error || !proyecto) throw new Error("No encontramos el proyecto.");
+    if (proyecto.tipo !== "video") throw new Error("Este proyecto no es de tipo vídeo.");
+
+    const perfil = await comprobarCuota(supabase, userId, "video");
+
+    await supabase
+      .from("projects")
+      .update({ estado: "procesando", error_mensaje: null })
+      .eq("id", proyecto.id);
+
+    try {
+      const archivos: { path: string; nombre?: string }[] = proyecto.archivos_entrada ?? [];
+      if (archivos.length === 0) throw new Error("El proyecto no tiene fotos.");
+      if (archivos.length !== data.camaras.length) {
+        throw new Error("El número de fotos no coincide con el número de ajustes de cámara.");
+      }
+
+      const { data: firmadas, error: errFirma } = await supabase.storage
+        .from("uploads")
+        .createSignedUrls(archivos.map((a) => a.path), 3600);
+      if (errFirma) throw new Error("No hemos podido leer las fotos subidas.");
+
+      const { generarClipsEnParalelo, concatenarClips } = await import("@/lib/higgsfield.server");
+
+      const fotos = (firmadas ?? [])
+        .map((f: any, i: number) => ({
+          url: f.signedUrl as string | null,
+          prompt: promptCamara(data.camaras[i]!, proyecto.nombre),
+        }))
+        .filter((f: any): f is { url: string; prompt: string } => Boolean(f.url));
+
+      const clips = await generarClipsEnParalelo(fotos);
+      const urlFinal = await concatenarClips(clips);
+
+      await supabase
+        .from("projects")
+        .update({ estado: "listo", url_resultado: urlFinal, error_mensaje: null })
+        .eq("id", proyecto.id);
+
+      await sumarUso(supabase, userId, perfil, "video");
+      return { ok: true as const, url: urlFinal };
     } catch (e) {
       const mensaje = e instanceof Error ? e.message : "Error desconocido al generar el vídeo.";
       await marcarError(supabase, proyecto.id, mensaje);
