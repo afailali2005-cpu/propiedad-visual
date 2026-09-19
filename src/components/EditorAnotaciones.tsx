@@ -43,7 +43,7 @@ export function EditorAnotaciones({
   const contenedorRef = useRef<HTMLDivElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [seleccion, setSeleccion] = useState<string | null>(null);
-  const arrastreRef = useRef<{ id: string; extremo?: "fin" } | null>(null);
+  const arrastreRef = useRef<{ id: string; extremo?: "fin" | undefined } | null>(null);
 
   function coordenadas(e: { clientX: number; clientY: number }) {
     const rect = contenedorRef.current?.getBoundingClientRect();

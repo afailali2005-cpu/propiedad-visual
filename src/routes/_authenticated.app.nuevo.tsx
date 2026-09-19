@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Camera, ChevronDown, ChevronUp, Plus, Sparkles, Upload, X } from "lucide-react";
+import { Camera, ChevronDown, ChevronUp, MapIcon, Plus, Sparkles, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { generarPlano } from "@/lib/plano2d.functions";
 import { generarVideo, generarVideoConCamaras, publicarTour } from "@/lib/proyectos.functions";
 
 export const Route = createFileRoute("/_authenticated/app/nuevo")({
@@ -16,13 +17,14 @@ export const Route = createFileRoute("/_authenticated/app/nuevo")({
   component: NuevoProyecto,
 });
 
-type Tipo = "video" | "tour3d";
+type Tipo = "video" | "tour3d" | "plano2d";
 type ModoVideo = "automatico" | "editor";
 type Fase = "idle" | "subiendo" | "procesando" | "listo" | "error";
 
 const ACEPTA: Record<Tipo, string> = {
   video: "image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif",
   tour3d: ".ply,.sog,.ssog,.lcc,.glb",
+  plano2d: "image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif",
 };
 
 const TIPOS_COMPATIBLES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -73,12 +75,14 @@ function NuevoProyecto() {
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const inputEditorRef = useRef<HTMLInputElement>(null);
+  const inputPlanoRef = useRef<HTMLInputElement>(null);
   const arrastrandoRef = useRef<number | null>(null);
 
   const [tipo, setTipo] = useState<Tipo>("video");
   const [modoVideo, setModoVideo] = useState<ModoVideo>("automatico");
   const [nombre, setNombre] = useState("");
   const [archivos, setArchivos] = useState<File[]>([]);
+  const [archivoPlano, setArchivoPlano] = useState<File | null>(null);
 
   const [archivosEditor, setArchivosEditor] = useState<File[]>([]);
   const [camarasEditor, setCamarasEditor] = useState<CameraValues[]>([]);
@@ -88,21 +92,23 @@ function NuevoProyecto() {
   const [progreso, setProgreso] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  function elegirTipo(t: Tipo) {
-    setTipo(t);
-    setModoVideo("automatico");
+  function reiniciarSelecciones() {
     setArchivos([]);
+    setArchivoPlano(null);
     setArchivosEditor([]);
     setCamarasEditor([]);
     setIndiceActivo(0);
   }
 
+  function elegirTipo(t: Tipo) {
+    setTipo(t);
+    setModoVideo("automatico");
+    reiniciarSelecciones();
+  }
+
   function elegirModoVideo(m: ModoVideo) {
     setModoVideo(m);
-    setArchivos([]);
-    setArchivosEditor([]);
-    setCamarasEditor([]);
-    setIndiceActivo(0);
+    reiniciarSelecciones();
   }
 
   async function añadirArchivos(lista: FileList | null) {
@@ -118,6 +124,12 @@ function NuevoProyecto() {
       if (ok) compatibles.push(ok);
     }
     setArchivos((actuales) => [...actuales, ...compatibles]);
+  }
+
+  async function elegirArchivoPlano(lista: FileList | null) {
+    if (!lista || lista.length === 0) return;
+    const ok = await validarFoto(lista[0]!);
+    if (ok) setArchivoPlano(ok);
   }
 
   async function añadirArchivosEditor(lista: FileList | null) {
@@ -295,6 +307,50 @@ function NuevoProyecto() {
     }
   }
 
+  /** Flujo del tipo Plano 2D: una sola foto/boceto -> plano limpio vía Roomagen. */
+  async function generarPlanoProyecto() {
+    if (!user || !archivoPlano) return;
+    if (!nombre.trim()) {
+      toast.error("Ponle un nombre a la propiedad.");
+      return;
+    }
+
+    setFase("subiendo");
+    setProgreso(0);
+    setErrorMsg(null);
+
+    try {
+      const { data: proyecto, error: errInsert } = await supabase
+        .from("projects")
+        .insert({ user_id: user.id, nombre: nombre.trim(), tipo: "plano2d", estado: "subiendo" })
+        .select("id")
+        .single();
+      if (errInsert || !proyecto) throw new Error("No hemos podido crear el proyecto.");
+
+      const limpio = archivoPlano.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${user.id}/${proyecto.id}/${Date.now()}_${limpio}`;
+      const { error: errUp } = await supabase.storage.from("uploads").upload(path, archivoPlano);
+      if (errUp) throw new Error("No hemos podido subir la imagen.");
+      await supabase
+        .from("projects")
+        .update({ archivos_entrada: [{ path, nombre: archivoPlano.name }] })
+        .eq("id", proyecto.id);
+      setProgreso(100);
+
+      setFase("procesando");
+      await generarPlano({ data: { project_id: proyecto.id } });
+
+      setFase("listo");
+      toast.success("Plano listo.");
+      navigate({ to: "/app/proyecto/$id", params: { id: proyecto.id } });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Algo ha fallado.";
+      setFase("error");
+      setErrorMsg(msg);
+      toast.error(msg);
+    }
+  }
+
   const ocupado = fase === "subiendo" || fase === "procesando";
   const modoEditorActivo = tipo === "video" && modoVideo === "editor";
   const esUltimaEnEditor = indiceActivo === archivosEditor.length - 1;
@@ -306,7 +362,7 @@ function NuevoProyecto() {
         Elige el formato, sube el material y genera.
       </p>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2">
+      <div className="mt-8 grid gap-4 sm:grid-cols-3">
         <TarjetaTipo
           activo={tipo === "video"}
           onClick={() => elegirTipo("video")}
@@ -320,6 +376,13 @@ function NuevoProyecto() {
           icono={Sparkles}
           titulo="Tour 3D interactivo"
           texto="Sube el escaneo del móvil exportado en PLY."
+        />
+        <TarjetaTipo
+          activo={tipo === "plano2d"}
+          onClick={() => elegirTipo("plano2d")}
+          icono={MapIcon}
+          titulo="Plano 2D profesional"
+          texto="Sube una foto o boceto y conviértelo en un plano limpio."
         />
       </div>
 
@@ -364,7 +427,56 @@ function NuevoProyecto() {
         />
       </div>
 
-      {modoEditorActivo ? (
+      {tipo === "plano2d" ? (
+        <div className="mt-6">
+          {!archivoPlano ? (
+            <div
+              className="surface-card cursor-pointer border-dashed p-8 text-center"
+              onClick={() => !ocupado && inputPlanoRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (!ocupado) elegirArchivoPlano(e.dataTransfer.files);
+              }}
+            >
+              <Upload className="mx-auto h-7 w-7 text-clay" />
+              <p className="mt-3 text-sm">Arrastra la foto del boceto/plano o haz clic para elegirla</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Vale una foto de un boceto a mano, un plano antiguo o de mala calidad. JPG, PNG o WEBP.
+              </p>
+              <input
+                ref={inputPlanoRef}
+                type="file"
+                className="hidden"
+                accept={ACEPTA.plano2d}
+                onChange={(e) => {
+                  elegirArchivoPlano(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </div>
+          ) : (
+            <div className="surface-card p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-sm font-medium">{archivoPlano.name}</p>
+                {!ocupado && (
+                  <button
+                    type="button"
+                    onClick={() => setArchivoPlano(null)}
+                    className="text-xs text-clay underline underline-offset-2"
+                  >
+                    Cambiar imagen
+                  </button>
+                )}
+              </div>
+              <VistaPreviaPlano archivo={archivoPlano} />
+              <Button variant="clay" size="xl" className="mt-4 w-full" onClick={generarPlanoProyecto} disabled={ocupado}>
+                {ocupado ? "Generando…" : "Generar plano profesional"}
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : modoEditorActivo ? (
         <div className="mt-6">
           {archivosEditor.length === 0 ? (
             <div
@@ -680,7 +792,7 @@ function NuevoProyecto() {
         </div>
       )}
 
-      {!modoEditorActivo && (
+      {tipo !== "plano2d" && !modoEditorActivo && (
         <Button variant="clay" size="xl" className="mt-8 w-full" onClick={generar} disabled={ocupado}>
           {ocupado ? "Generando…" : tipo === "video" ? "Generar vídeo" : "Publicar tour 3D"}
         </Button>
@@ -702,6 +814,22 @@ function Miniatura({ archivo }: { archivo: File }) {
     <img src={url} alt="" className="h-12 w-16 shrink-0 rounded-md object-cover" />
   ) : (
     <div className="h-12 w-16 shrink-0 rounded-md bg-muted" />
+  );
+}
+
+function VistaPreviaPlano({ archivo }: { archivo: File }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const nuevaUrl = URL.createObjectURL(archivo);
+    setUrl(nuevaUrl);
+    return () => URL.revokeObjectURL(nuevaUrl);
+  }, [archivo]);
+
+  return url ? (
+    <img src={url} alt="" className="max-h-72 w-full rounded-lg object-contain" />
+  ) : (
+    <div className="h-40 w-full rounded-lg bg-muted" />
   );
 }
 
