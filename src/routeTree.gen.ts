@@ -14,7 +14,11 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated.app'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated.app.index'
+import { Route as AuthenticatedAppCuentaRouteImport } from './routes/_authenticated.app.cuenta'
+import { Route as AuthenticatedAppNuevoRouteImport } from './routes/_authenticated.app.nuevo'
+import { Route as AuthenticatedAppProyectosRouteImport } from './routes/_authenticated.app.proyectos'
 import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe-webhook'
+import { Route as AuthenticatedAppProyectoIdRouteImport } from './routes/_authenticated.app.proyecto.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -40,24 +44,54 @@ const AuthenticatedAppIndexRoute = AuthenticatedAppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppCuentaRoute = AuthenticatedAppCuentaRouteImport.update({
+  id: '/cuenta',
+  path: '/cuenta',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
+const AuthenticatedAppNuevoRoute = AuthenticatedAppNuevoRouteImport.update({
+  id: '/nuevo',
+  path: '/nuevo',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
+const AuthenticatedAppProyectosRoute =
+  AuthenticatedAppProyectosRouteImport.update({
+    id: '/proyectos',
+    path: '/proyectos',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const ApiPublicStripeWebhookRoute = ApiPublicStripeWebhookRouteImport.update({
   id: '/api/public/stripe-webhook',
   path: '/api/public/stripe-webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedAppProyectoIdRoute =
+  AuthenticatedAppProyectoIdRouteImport.update({
+    id: '/proyecto/$id',
+    path: '/proyecto/$id',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
+  '/app/cuenta': typeof AuthenticatedAppCuentaRoute
+  '/app/nuevo': typeof AuthenticatedAppNuevoRoute
+  '/app/proyectos': typeof AuthenticatedAppProyectosRoute
   '/api/public/stripe-webhook': typeof ApiPublicStripeWebhookRoute
   '/app/': typeof AuthenticatedAppIndexRoute
+  '/app/proyecto/$id': typeof AuthenticatedAppProyectoIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/app/cuenta': typeof AuthenticatedAppCuentaRoute
+  '/app/nuevo': typeof AuthenticatedAppNuevoRoute
+  '/app/proyectos': typeof AuthenticatedAppProyectosRoute
   '/api/public/stripe-webhook': typeof ApiPublicStripeWebhookRoute
   '/app': typeof AuthenticatedAppIndexRoute
+  '/app/proyecto/$id': typeof AuthenticatedAppProyectoIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -65,22 +99,47 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
+  '/_authenticated/app/cuenta': typeof AuthenticatedAppCuentaRoute
+  '/_authenticated/app/nuevo': typeof AuthenticatedAppNuevoRoute
+  '/_authenticated/app/proyectos': typeof AuthenticatedAppProyectosRoute
   '/api/public/stripe-webhook': typeof ApiPublicStripeWebhookRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
+  '/_authenticated/app/proyecto/$id': typeof AuthenticatedAppProyectoIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/app' | '/api/public/stripe-webhook' | '/app/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/app'
+    | '/app/cuenta'
+    | '/app/nuevo'
+    | '/app/proyectos'
+    | '/api/public/stripe-webhook'
+    | '/app/'
+    | '/app/proyecto/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/api/public/stripe-webhook' | '/app'
+  to:
+    | '/'
+    | '/auth'
+    | '/app/cuenta'
+    | '/app/nuevo'
+    | '/app/proyectos'
+    | '/api/public/stripe-webhook'
+    | '/app'
+    | '/app/proyecto/$id'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/app'
+    | '/_authenticated/app/cuenta'
+    | '/_authenticated/app/nuevo'
+    | '/_authenticated/app/proyectos'
     | '/api/public/stripe-webhook'
     | '/_authenticated/app/'
+    | '/_authenticated/app/proyecto/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -127,6 +186,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppIndexRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/cuenta': {
+      id: '/_authenticated/app/cuenta'
+      path: '/cuenta'
+      fullPath: '/app/cuenta'
+      preLoaderRoute: typeof AuthenticatedAppCuentaRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/nuevo': {
+      id: '/_authenticated/app/nuevo'
+      path: '/nuevo'
+      fullPath: '/app/nuevo'
+      preLoaderRoute: typeof AuthenticatedAppNuevoRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/proyectos': {
+      id: '/_authenticated/app/proyectos'
+      path: '/proyectos'
+      fullPath: '/app/proyectos'
+      preLoaderRoute: typeof AuthenticatedAppProyectosRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/api/public/stripe-webhook': {
       id: '/api/public/stripe-webhook'
       path: '/api/public/stripe-webhook'
@@ -134,15 +214,30 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicStripeWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/app/proyecto/$id': {
+      id: '/_authenticated/app/proyecto/$id'
+      path: '/proyecto/$id'
+      fullPath: '/app/proyecto/$id'
+      preLoaderRoute: typeof AuthenticatedAppProyectoIdRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
   }
 }
 
 interface AuthenticatedAppRouteChildren {
+  AuthenticatedAppCuentaRoute: typeof AuthenticatedAppCuentaRoute
+  AuthenticatedAppNuevoRoute: typeof AuthenticatedAppNuevoRoute
+  AuthenticatedAppProyectosRoute: typeof AuthenticatedAppProyectosRoute
   AuthenticatedAppIndexRoute: typeof AuthenticatedAppIndexRoute
+  AuthenticatedAppProyectoIdRoute: typeof AuthenticatedAppProyectoIdRoute
 }
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
+  AuthenticatedAppCuentaRoute: AuthenticatedAppCuentaRoute,
+  AuthenticatedAppNuevoRoute: AuthenticatedAppNuevoRoute,
+  AuthenticatedAppProyectosRoute: AuthenticatedAppProyectosRoute,
   AuthenticatedAppIndexRoute: AuthenticatedAppIndexRoute,
+  AuthenticatedAppProyectoIdRoute: AuthenticatedAppProyectoIdRoute,
 }
 
 const AuthenticatedAppRouteWithChildren =
