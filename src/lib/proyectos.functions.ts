@@ -6,6 +6,17 @@ import { LIMITES, type PlanId } from "@/lib/planes";
 
 const entrada = z.object({ project_id: z.string().uuid() });
 
+const camaraSchema = z.object({
+  horizontal: z.number().min(-10).max(10),
+  vertical: z.number().min(-10).max(10),
+  zoom: z.number().min(-10).max(10),
+  pan: z.number().min(-10).max(10),
+  tilt: z.number().min(-10).max(10),
+  rotate: z.number().min(-10).max(10),
+});
+
+const entradaEditor = z.object({ project_id: z.string().uuid(), camera: camaraSchema });
+
 type Perfil = {
   plan: PlanId;
   videos_usados_mes: number;
@@ -82,7 +93,64 @@ async function sumarUso(supabase: any, userId: string, perfil: Perfil, tipo: "vi
     .eq("id", userId);
 }
 
-/** Genera el vídeo cinematográfico a partir de las fotos del proyecto. */
+/** Prompt por escena: intenta inferir la estancia del nombre del archivo (modo Automático). */
+function promptEscena(nombreArchivo: string, propiedad: string): string {
+  const n = nombreArchivo.toLowerCase();
+  const estancia =
+    n.includes("salon") || n.includes("living") ? "salón"
+    : n.includes("cocina") || n.includes("kitchen") ? "cocina"
+    : n.includes("dorm") || n.includes("habit") || n.includes("bed") ? "dormitorio"
+    : n.includes("bano") || n.includes("baño") || n.includes("bath") ? "baño"
+    : n.includes("terraza") || n.includes("balc") || n.includes("exterior") || n.includes("jardin") ? "exterior"
+    : "estancia";
+
+  return (
+    `Real estate cinematic walkthrough of a ${estancia} in "${propiedad}". ` +
+    "Slow, smooth camera dolly forward with a gentle glide, natural daylight, " +
+    "steady and elegant motion, no people, no distortion of walls or furniture, " +
+    "photorealistic, architectural video style."
+  );
+}
+
+/**
+ * Traduce los 6 valores del editor de cámara (Fase 1: estilo Rendy "Camera
+ * Control", rango -10..10) a una descripción textual para Higgsfield.
+ * No es control geométrico literal — es la mejor aproximación en lenguaje
+ * natural mientras Higgsfield no exponga parámetros de cámara crudos.
+ */
+function promptCamara(
+  camera: { horizontal: number; vertical: number; zoom: number; pan: number; tilt: number; rotate: number },
+  propiedad: string,
+): string {
+  const partes: string[] = [];
+
+  if (camera.zoom > 3) partes.push("slow cinematic push-in toward the subject");
+  else if (camera.zoom < -3) partes.push("slow pull-back revealing more of the room");
+
+  if (camera.horizontal > 3) partes.push("gliding to the right");
+  else if (camera.horizontal < -3) partes.push("gliding to the left");
+
+  if (camera.vertical > 3) partes.push("rising smoothly");
+  else if (camera.vertical < -3) partes.push("lowering smoothly");
+
+  if (camera.pan > 3) partes.push("with a gentle rightward pan");
+  else if (camera.pan < -3) partes.push("with a gentle leftward pan");
+
+  if (camera.tilt > 3) partes.push("tilting slightly upward");
+  else if (camera.tilt < -3) partes.push("tilting slightly downward");
+
+  if (Math.abs(camera.rotate) > 4) partes.push("with a very subtle cinematic roll");
+
+  const movimiento = partes.length > 0 ? partes.join(", ") : "slow steady dolly forward";
+
+  return (
+    `Real estate cinematic shot of "${propiedad}", camera ${movimiento}. ` +
+    "Smooth, elegant, physically plausible motion, natural daylight, no people, " +
+    "no distortion of walls, windows or furniture, photorealistic, architectural video style."
+  );
+}
+
+/** Genera el vídeo cinematográfico a partir de las fotos del proyecto (modo Automático). */
 export const generarVideo = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => entrada.parse(data))
@@ -105,27 +173,25 @@ export const generarVideo = createServerFn({ method: "POST" })
       .eq("id", proyecto.id);
 
     try {
-      const rutas: string[] = (proyecto.archivos_entrada ?? []).map((a: any) => a.path);
-      if (rutas.length === 0) throw new Error("El proyecto no tiene fotos.");
+      const archivos: { path: string; nombre?: string }[] = proyecto.archivos_entrada ?? [];
+      if (archivos.length === 0) throw new Error("El proyecto no tiene fotos.");
+      if (archivos.length > 12) throw new Error("Máximo 12 fotos por vídeo.");
 
       const { data: firmadas, error: errFirma } = await supabase.storage
         .from("uploads")
-        .createSignedUrls(rutas, 3600);
+        .createSignedUrls(archivos.map((a) => a.path), 3600);
       if (errFirma) throw new Error("No hemos podido leer las fotos subidas.");
 
-      const { generarClipDesdeFoto, concatenarClips } = await import("@/lib/higgsfield.server");
+      const { generarClipsEnParalelo, concatenarClips } = await import("@/lib/higgsfield.server");
 
-      const clips = [];
-      for (const f of firmadas ?? []) {
-        if (!f.signedUrl) continue;
-        clips.push(
-          await generarClipDesdeFoto(
-            f.signedUrl,
-            `Recorrido cinematográfico de interior inmobiliario: ${proyecto.nombre}. Movimiento de cámara suave y elegante.`,
-          ),
-        );
-      }
+      const fotos = (firmadas ?? [])
+        .map((f: any, i: number) => ({
+          url: f.signedUrl as string | null,
+          prompt: promptEscena(archivos[i]?.nombre ?? "", proyecto.nombre),
+        }))
+        .filter((f: any): f is { url: string; prompt: string } => Boolean(f.url));
 
+      const clips = await generarClipsEnParalelo(fotos);
       const urlFinal = await concatenarClips(clips);
 
       await supabase
@@ -142,7 +208,56 @@ export const generarVideo = createServerFn({ method: "POST" })
     }
   });
 
-/** Publica el tour 3D a partir del archivo .ply/.spz/.splat del proyecto. */
+/** Genera un único clip a partir de la foto del proyecto y los 6 valores del editor de cámara (modo Editor). */
+export const generarClipEditor = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => entradaEditor.parse(data))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context as any;
+
+    const { data: proyecto, error } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", data.project_id)
+      .maybeSingle();
+    if (error || !proyecto) throw new Error("No encontramos el proyecto.");
+    if (proyecto.tipo !== "video") throw new Error("Este proyecto no es de tipo vídeo.");
+
+    const perfil = await comprobarCuota(supabase, userId, "video");
+
+    await supabase
+      .from("projects")
+      .update({ estado: "procesando", error_mensaje: null })
+      .eq("id", proyecto.id);
+
+    try {
+      const archivo = (proyecto.archivos_entrada ?? [])[0];
+      if (!archivo?.path) throw new Error("El proyecto no tiene foto.");
+
+      const { data: firmada, error: errFirma } = await supabase.storage
+        .from("uploads")
+        .createSignedUrl(archivo.path, 3600);
+      if (errFirma || !firmada?.signedUrl) throw new Error("No hemos podido leer la foto subida.");
+
+      const { generarClipDesdeFoto } = await import("@/lib/higgsfield.server");
+      const prompt = promptCamara(data.camera, proyecto.nombre);
+      const clip = await generarClipDesdeFoto(firmada.signedUrl, prompt);
+
+      await supabase
+        .from("projects")
+        .update({ estado: "listo", url_resultado: clip.url, error_mensaje: null })
+        .eq("id", proyecto.id);
+
+      await sumarUso(supabase, userId, perfil, "video");
+      return { ok: true as const, url: clip.url };
+    } catch (e) {
+      const mensaje = e instanceof Error ? e.message : "Error desconocido al generar el vídeo.";
+      await marcarError(supabase, proyecto.id, mensaje);
+      throw new Error(mensaje);
+    }
+  });
+
+/** Publica el tour 3D a partir del archivo .ply/.sog del proyecto. */
 export const publicarTour = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => entrada.parse(data))

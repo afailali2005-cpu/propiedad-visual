@@ -60,6 +60,16 @@ export async function generarClipDesdeFoto(urlFoto: string, prompt: string): Pro
 }
 
 /**
+ * Genera varios clips en paralelo, uno por foto.
+ * TODO: revisar límites de concurrencia del proveedor cuando tengamos la key.
+ */
+export async function generarClipsEnParalelo(
+  fotos: { url: string; prompt: string }[],
+): Promise<ClipGenerado[]> {
+  return Promise.all(fotos.map((f) => generarClipDesdeFoto(f.url, f.prompt)));
+}
+
+/**
  * Une varios clips en un único vídeo final.
  * TODO: sustituir por el servicio de concatenación definitivo (p. ej. un
  * worker con ffmpeg o el endpoint de stitching del proveedor).
