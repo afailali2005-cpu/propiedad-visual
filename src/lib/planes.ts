@@ -8,6 +8,7 @@ export type Plan = {
   resumen: string;
   videos: number;
   tours: number;
+  planos: number;
   destacado?: boolean;
   ventajas: string[];
 };
@@ -17,13 +18,15 @@ export const PLANES: Plan[] = [
     id: "free",
     nombre: "Pay-per-uso",
     precio: "19€",
-    periodo: "por vídeo · 15€ por tour 3D",
+    periodo: "por vídeo · 15€ por tour 3D · 5€ por plano 2D",
     resumen: "Sin cuota mensual. Pagas solo lo que generas.",
     videos: 0,
     tours: 0,
+    planos: 0,
     ventajas: [
       "19€ por vídeo cinematográfico",
       "15€ por tour 3D interactivo",
+      "5€ por plano 2D profesional",
       "Entrega en minutos",
       "Sin permanencia",
     ],
@@ -36,7 +39,14 @@ export const PLANES: Plan[] = [
     resumen: "Para el agente que publica unos pocos anuncios al mes.",
     videos: 5,
     tours: 1,
-    ventajas: ["5 vídeos al mes", "1 tour 3D al mes", "Descarga en MP4 y enlace web", "Soporte por email"],
+    planos: 10,
+    ventajas: [
+      "5 vídeos al mes",
+      "1 tour 3D al mes",
+      "10 planos 2D al mes",
+      "Descarga en MP4 y enlace web",
+      "Soporte por email",
+    ],
   },
   {
     id: "pro",
@@ -46,10 +56,12 @@ export const PLANES: Plan[] = [
     resumen: "El equilibrio ideal para una cartera activa.",
     videos: 15,
     tours: 4,
+    planos: 30,
     destacado: true,
     ventajas: [
       "15 vídeos al mes",
       "4 tours 3D al mes",
+      "30 planos 2D al mes",
       "Formatos vertical y horizontal",
       "Soporte prioritario",
     ],
@@ -62,15 +74,22 @@ export const PLANES: Plan[] = [
     resumen: "Para agencias con varios comerciales y volumen alto.",
     videos: 40,
     tours: 12,
-    ventajas: ["40 vídeos al mes", "12 tours 3D al mes", "Varios usuarios", "Gestor de cuenta dedicado"],
+    planos: 100,
+    ventajas: [
+      "40 vídeos al mes",
+      "12 tours 3D al mes",
+      "100 planos 2D al mes",
+      "Varios usuarios",
+      "Gestor de cuenta dedicado",
+    ],
   },
 ];
 
-export const LIMITES: Record<PlanId, { videos: number; tours: number }> = {
-  free: { videos: 1, tours: 1 },
-  starter: { videos: 5, tours: 1 },
-  pro: { videos: 15, tours: 4 },
-  agency: { videos: 40, tours: 12 },
+export const LIMITES: Record<PlanId, { videos: number; tours: number; planos: number }> = {
+  free: { videos: 1, tours: 1, planos: 1 },
+  starter: { videos: 5, tours: 1, planos: 10 },
+  pro: { videos: 15, tours: 4, planos: 30 },
+  agency: { videos: 40, tours: 12, planos: 100 },
 };
 
 export const NOMBRE_PLAN: Record<PlanId, string> = {
