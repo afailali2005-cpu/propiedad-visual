@@ -135,5 +135,6 @@ export async function generarClipsEnParalelo(
  */
 export async function concatenarClips(clips: ClipGenerado[]): Promise<string> {
   if (clips.length === 0) throw new Error("No hay clips que unir.");
-  return clips.map((c) => c.url).join("\n");
+  if (clips.length === 1) return clips[0]!.url;
+  return JSON.stringify(clips.map((c) => c.url));
 }
