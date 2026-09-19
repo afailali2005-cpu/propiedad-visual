@@ -3,13 +3,13 @@ import { Camera, ChevronDown, ChevronUp, Plus, Sparkles, Upload, X } from "lucid
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { CameraEditor, type CameraValues } from "@/components/CameraEditor";
+import { CAMARA_INICIAL, CameraEditor, type CameraValues } from "@/components/CameraEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { generarClipEditor, generarVideo, publicarTour } from "@/lib/proyectos.functions";
+import { generarVideo, generarVideoConCamaras, publicarTour } from "@/lib/proyectos.functions";
 
 export const Route = createFileRoute("/_authenticated/app/nuevo")({
   head: () => ({ meta: [{ title: "Nuevo proyecto · Habitour" }] }),
@@ -79,7 +79,11 @@ function NuevoProyecto() {
   const [modoVideo, setModoVideo] = useState<ModoVideo>("automatico");
   const [nombre, setNombre] = useState("");
   const [archivos, setArchivos] = useState<File[]>([]);
-  const [archivoEditor, setArchivoEditor] = useState<File | null>(null);
+
+  const [archivosEditor, setArchivosEditor] = useState<File[]>([]);
+  const [camarasEditor, setCamarasEditor] = useState<CameraValues[]>([]);
+  const [indiceActivo, setIndiceActivo] = useState(0);
+
   const [fase, setFase] = useState<Fase>("idle");
   const [progreso, setProgreso] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -88,13 +92,17 @@ function NuevoProyecto() {
     setTipo(t);
     setModoVideo("automatico");
     setArchivos([]);
-    setArchivoEditor(null);
+    setArchivosEditor([]);
+    setCamarasEditor([]);
+    setIndiceActivo(0);
   }
 
   function elegirModoVideo(m: ModoVideo) {
     setModoVideo(m);
     setArchivos([]);
-    setArchivoEditor(null);
+    setArchivosEditor([]);
+    setCamarasEditor([]);
+    setIndiceActivo(0);
   }
 
   async function añadirArchivos(lista: FileList | null) {
@@ -112,10 +120,17 @@ function NuevoProyecto() {
     setArchivos((actuales) => [...actuales, ...compatibles]);
   }
 
-  async function añadirArchivoEditor(lista: FileList | null) {
-    if (!lista || lista.length === 0) return;
-    const ok = await validarFoto(lista[0]!);
-    if (ok) setArchivoEditor(ok);
+  async function añadirArchivosEditor(lista: FileList | null) {
+    if (!lista) return;
+    const nuevos = Array.from(lista);
+    const compatibles: File[] = [];
+    for (const archivo of nuevos) {
+      const ok = await validarFoto(archivo);
+      if (ok) compatibles.push(ok);
+    }
+    if (compatibles.length === 0) return;
+    setArchivosEditor((actuales) => [...actuales, ...compatibles]);
+    setCamarasEditor((actuales) => [...actuales, ...compatibles.map(() => ({ ...CAMARA_INICIAL }))]);
   }
 
   function quitar(i: number) {
@@ -133,6 +148,37 @@ function NuevoProyecto() {
       reordenados.splice(hasta, 0, archivo);
       return reordenados;
     });
+  }
+
+  function quitarEditor(i: number) {
+    setArchivosEditor((actuales) => actuales.filter((_, idx) => idx !== i));
+    setCamarasEditor((actuales) => actuales.filter((_, idx) => idx !== i));
+    setIndiceActivo((actual) => Math.max(0, Math.min(actual, archivosEditor.length - 2)));
+  }
+
+  function moverEditor(desde: number, hasta: number) {
+    if (desde === hasta || desde < 0 || hasta < 0 || desde >= archivosEditor.length || hasta >= archivosEditor.length) {
+      return;
+    }
+    setArchivosEditor((actuales) => {
+      const r = [...actuales];
+      const [x] = r.splice(desde, 1);
+      if (!x) return actuales;
+      r.splice(hasta, 0, x);
+      return r;
+    });
+    setCamarasEditor((actuales) => {
+      const r = [...actuales];
+      const [x] = r.splice(desde, 1);
+      if (!x) return actuales;
+      r.splice(hasta, 0, x);
+      return r;
+    });
+    setIndiceActivo(hasta);
+  }
+
+  function actualizarCamaraActiva(camara: CameraValues) {
+    setCamarasEditor((actuales) => actuales.map((c, i) => (i === indiceActivo ? camara : c)));
   }
 
   async function generar() {
@@ -199,9 +245,12 @@ function NuevoProyecto() {
     }
   }
 
-  /** Flujo del modo Editor: una sola foto + los 6 valores de Camera Control. */
-  async function generarConCamara(camera: CameraValues) {
-    if (!user || !archivoEditor) return;
+  function guardarYSiguiente() {
+    setIndiceActivo((i) => Math.min(i + 1, archivosEditor.length - 1));
+  }
+
+  async function generarConCamaras() {
+    if (!user || archivosEditor.length === 0) return;
     if (!nombre.trim()) {
       toast.error("Ponle un nombre a la propiedad.");
       return;
@@ -219,18 +268,21 @@ function NuevoProyecto() {
         .single();
       if (errInsert || !proyecto) throw new Error("No hemos podido crear el proyecto.");
 
-      const limpio = archivoEditor.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const path = `${user.id}/${proyecto.id}/${Date.now()}_${limpio}`;
-      const { error: errUp } = await supabase.storage.from("uploads").upload(path, archivoEditor);
-      if (errUp) throw new Error("No hemos podido subir la foto.");
-      await supabase
-        .from("projects")
-        .update({ archivos_entrada: [{ path, nombre: archivoEditor.name }] })
-        .eq("id", proyecto.id);
-      setProgreso(100);
+      const entradas: { path: string; nombre: string }[] = [];
+      for (let i = 0; i < archivosEditor.length; i++) {
+        const f = archivosEditor[i]!;
+        const limpio = f.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const path = `${user.id}/${proyecto.id}/${Date.now()}_${limpio}`;
+        const { error: errUp } = await supabase.storage.from("uploads").upload(path, f);
+        if (errUp) throw new Error(`No hemos podido subir ${f.name}.`);
+        entradas.push({ path, nombre: f.name });
+        setProgreso(Math.round(((i + 1) / archivosEditor.length) * 100));
+      }
+
+      await supabase.from("projects").update({ archivos_entrada: entradas }).eq("id", proyecto.id);
 
       setFase("procesando");
-      await generarClipEditor({ data: { project_id: proyecto.id, camera } });
+      await generarVideoConCamaras({ data: { project_id: proyecto.id, camaras: camarasEditor } });
 
       setFase("listo");
       toast.success("Proyecto listo.");
@@ -245,6 +297,7 @@ function NuevoProyecto() {
 
   const ocupado = fase === "subiendo" || fase === "procesando";
   const modoEditorActivo = tipo === "video" && modoVideo === "editor";
+  const esUltimaEnEditor = indiceActivo === archivosEditor.length - 1;
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -313,47 +366,150 @@ function NuevoProyecto() {
 
       {modoEditorActivo ? (
         <div className="mt-6">
-          {!archivoEditor ? (
+          {archivosEditor.length === 0 ? (
             <div
               className="surface-card cursor-pointer border-dashed p-8 text-center"
               onClick={() => !ocupado && inputEditorRef.current?.click()}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault();
-                if (!ocupado) añadirArchivoEditor(e.dataTransfer.files);
+                if (!ocupado) añadirArchivosEditor(e.dataTransfer.files);
               }}
             >
               <Upload className="mx-auto h-7 w-7 text-clay" />
-              <p className="mt-3 text-sm">Arrastra la foto que quieras trabajar o haz clic para elegirla</p>
+              <p className="mt-3 text-sm">Arrastra las fotos que quieras trabajar o haz clic para elegirlas</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Formatos admitidos: JPG, PNG, WEBP. Los HEIC se convierten automáticamente.
+                Formatos admitidos: JPG, PNG, WEBP. Los HEIC se convierten automáticamente. Puedes subir varias.
               </p>
               <input
                 ref={inputEditorRef}
                 type="file"
                 className="hidden"
                 accept={ACEPTA.video}
+                multiple
                 onChange={(e) => {
-                  añadirArchivoEditor(e.target.files);
+                  añadirArchivosEditor(e.target.files);
                   e.target.value = "";
                 }}
               />
             </div>
           ) : (
             <>
-              <div className="mb-3 flex items-center justify-between">
-                <p className="text-xs text-muted-foreground">Mueve el encuadre o ajusta los sliders y pulsa Aplicar.</p>
-                {!ocupado && (
-                  <button
-                    type="button"
-                    onClick={() => setArchivoEditor(null)}
-                    className="text-xs text-clay underline underline-offset-2"
+              <p className="mb-2 text-xs text-muted-foreground">
+                Ajusta la cámara de cada foto. Haz clic en cualquier número para saltar directamente a esa foto.
+              </p>
+              <ul className="mb-4 space-y-2">
+                {archivosEditor.map((f, i) => (
+                  <li
+                    key={`${f.name}-${f.size}-${f.lastModified}-${i}`}
+                    draggable={!ocupado}
+                    onDragStart={() => {
+                      arrastrandoRef.current = i;
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const desde = arrastrandoRef.current;
+                      if (desde !== null) moverEditor(desde, i);
+                      arrastrandoRef.current = null;
+                    }}
+                    onDragEnd={() => {
+                      arrastrandoRef.current = null;
+                    }}
+                    onClick={() => setIndiceActivo(i)}
+                    className={`surface-card flex min-w-0 cursor-pointer items-center gap-3 p-2 text-sm transition ${
+                      i === indiceActivo ? "ring-2 ring-clay" : ""
+                    }`}
                   >
-                    Cambiar foto
-                  </button>
-                )}
-              </div>
-              <CameraEditor archivo={archivoEditor} generando={ocupado} onAplicar={generarConCamara} />
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-clay font-semibold text-clay-foreground">
+                      {i + 1}
+                    </span>
+                    <Miniatura archivo={f} />
+                    <span className="min-w-0 flex-1 truncate" title={f.name}>
+                      {f.name}
+                    </span>
+                    {!ocupado && (
+                      <div className="flex shrink-0 items-center">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-10 w-10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            moverEditor(i, i - 1);
+                          }}
+                          disabled={i === 0}
+                          aria-label={`Subir ${f.name}`}
+                        >
+                          <ChevronUp className="h-5 w-5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-10 w-10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            moverEditor(i, i + 1);
+                          }}
+                          disabled={i === archivosEditor.length - 1}
+                          aria-label={`Bajar ${f.name}`}
+                        >
+                          <ChevronDown className="h-5 w-5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-10 w-10 text-muted-foreground"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            quitarEditor(i);
+                          }}
+                          aria-label={`Quitar ${f.name}`}
+                        >
+                          <X className="h-5 w-5" />
+                        </Button>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {!ocupado && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mb-4 w-full"
+                  onClick={() => inputEditorRef.current?.click()}
+                >
+                  <Plus className="h-4 w-4" />
+                  Añadir más fotos
+                </Button>
+              )}
+              <input
+                ref={inputEditorRef}
+                type="file"
+                className="hidden"
+                accept={ACEPTA.video}
+                multiple
+                onChange={(e) => {
+                  añadirArchivosEditor(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+
+              <p className="mb-2 text-sm font-medium">
+                Editando foto {indiceActivo + 1} de {archivosEditor.length}
+              </p>
+              <CameraEditor
+                archivo={archivosEditor[indiceActivo]!}
+                camera={camarasEditor[indiceActivo] ?? CAMARA_INICIAL}
+                onCameraChange={actualizarCamaraActiva}
+                generando={ocupado}
+                etiquetaBoton={esUltimaEnEditor ? "Aplicar movimiento" : "Guardar y siguiente foto"}
+                onSubmit={esUltimaEnEditor ? generarConCamaras : guardarYSiguiente}
+              />
             </>
           )}
         </div>
