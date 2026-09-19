@@ -22,6 +22,7 @@ export type Database = {
           nombre: string | null
           periodo_inicio: string
           plan: string
+          planos_usados_mes: number
           stripe_customer_id: string | null
           tours_usados_mes: number
           videos_usados_mes: number
@@ -33,6 +34,7 @@ export type Database = {
           nombre?: string | null
           periodo_inicio?: string
           plan?: string
+          planos_usados_mes?: number
           stripe_customer_id?: string | null
           tours_usados_mes?: number
           videos_usados_mes?: number
@@ -44,6 +46,7 @@ export type Database = {
           nombre?: string | null
           periodo_inicio?: string
           plan?: string
+          planos_usados_mes?: number
           stripe_customer_id?: string | null
           tours_usados_mes?: number
           videos_usados_mes?: number
@@ -53,6 +56,7 @@ export type Database = {
       projects: {
         Row: {
           actualizado_en: string
+          anotaciones: Json | null
           archivos_entrada: Json
           creado_en: string
           error_mensaje: string | null
@@ -60,12 +64,15 @@ export type Database = {
           id: string
           miniatura_url: string | null
           nombre: string
+          plano_3d_url: string | null
+          plano_colorizado_url: string | null
           tipo: string
           url_resultado: string | null
           user_id: string
         }
         Insert: {
           actualizado_en?: string
+          anotaciones?: Json | null
           archivos_entrada?: Json
           creado_en?: string
           error_mensaje?: string | null
@@ -73,12 +80,15 @@ export type Database = {
           id?: string
           miniatura_url?: string | null
           nombre: string
+          plano_3d_url?: string | null
+          plano_colorizado_url?: string | null
           tipo: string
           url_resultado?: string | null
           user_id: string
         }
         Update: {
           actualizado_en?: string
+          anotaciones?: Json | null
           archivos_entrada?: Json
           creado_en?: string
           error_mensaje?: string | null
@@ -86,6 +96,8 @@ export type Database = {
           id?: string
           miniatura_url?: string | null
           nombre?: string
+          plano_3d_url?: string | null
+          plano_colorizado_url?: string | null
           tipo?: string
           url_resultado?: string | null
           user_id?: string
