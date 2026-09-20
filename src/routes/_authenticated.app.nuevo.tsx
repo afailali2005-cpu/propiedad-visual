@@ -28,6 +28,47 @@ const ACEPTA: Record<Tipo, string> = {
 };
 
 const TIPOS_COMPATIBLES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+const SUPABASE_URL_BASE =
+  (import.meta.env['VITE_SUPABASE_URL'] as string | undefined) ?? "";
+
+async function subirResumable(
+  file: File,
+  bucketName: string,
+  objectName: string,
+  onProgreso: (pct: number) => void,
+): Promise<void> {
+  const { tus } = await import("tus-js-client");
+  const { data: sesion } = await supabase.auth.getSession();
+  const token = sesion.session?.access_token;
+  if (!token) throw new Error("Tu sesión ha caducado. Vuelve a iniciar sesión.");
+
+  await new Promise<void>((resolve, reject) => {
+    const upload = new tus.Upload(file, {
+      endpoint: `${SUPABASE_URL_BASE}/storage/v1/upload/resumable`,
+      retryDelays: [0, 3000, 5000, 10000, 20000],
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "x-upsert": "true",
+      },
+      uploadDataDuringCreation: true,
+      removeFingerprintOnSuccess: true,
+      chunkSize: 6 * 1024 * 1024,
+      metadata: {
+        bucketName,
+        objectName,
+        contentType: file.type || "application/octet-stream",
+        cacheControl: "3600",
+      },
+      onError: (error) => reject(error instanceof Error ? error : new Error(String(error))),
+      onProgress: (bytesUploaded, bytesTotal) => {
+        if (bytesTotal > 0) onProgreso(Math.round((bytesUploaded / bytesTotal) * 100));
+      },
+      onSuccess: () => resolve(),
+    });
+    void upload.start();
+  });
+}
 const EXTENSIONES_RAW = new Set(["arw", "cr2", "cr3", "nef", "dng", "raf", "orf", "rw2", "pef", "srw"]);
 const MAXIMO_BYTES = 15 * 1024 * 1024;
 
