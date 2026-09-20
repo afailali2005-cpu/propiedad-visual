@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Camera, Plus, Sparkles } from "lucide-react";
+import { Camera, MapIcon, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,7 +16,7 @@ export const Route = createFileRoute("/_authenticated/app/proyectos")({
 type Proyecto = {
   id: string;
   nombre: string;
-  tipo: "video" | "tour3d";
+  tipo: "video" | "tour3d" | "plano2d";
   estado: "subiendo" | "procesando" | "listo" | "error";
   miniatura_url: string | null;
   creado_en: string;
@@ -28,17 +29,25 @@ const ESTADO: Record<Proyecto["estado"], { etiqueta: string; clase: string }> = 
   error: { etiqueta: "Error", clase: "bg-destructive/10 text-destructive" },
 };
 
+const TIPO_LABEL: Record<Proyecto["tipo"], string> = {
+  video: "Vídeo",
+  tour3d: "Tour 3D",
+  plano2d: "Plano 2D",
+};
+
 const FILTROS = [
   { id: "todos", etiqueta: "Todos" },
   { id: "video", etiqueta: "Vídeos" },
   { id: "tour3d", etiqueta: "Tours 3D" },
+  { id: "plano2d", etiqueta: "Planos 2D" },
 ] as const;
 
 function MisProyectos() {
   const { user } = useAuth();
   const [filtro, setFiltro] = useState<(typeof FILTROS)[number]["id"]>("todos");
+  const [borrando, setBorrando] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ["projects", user?.id],
     enabled: Boolean(user),
     queryFn: async () => {
@@ -50,6 +59,19 @@ function MisProyectos() {
       return data as Proyecto[];
     },
   });
+
+  async function eliminar(id: string, nombre: string) {
+    if (!window.confirm(`¿Eliminar "${nombre}"? Esta acción no se puede deshacer.`)) return;
+    setBorrando(id);
+    const { error } = await supabase.from("projects").delete().eq("id", id);
+    setBorrando(null);
+    if (error) {
+      toast.error("No hemos podido eliminar el proyecto.");
+      return;
+    }
+    toast.success("Proyecto eliminado.");
+    refetch();
+  }
 
   const lista = (data ?? []).filter((p) => filtro === "todos" || p.tipo === filtro);
 
@@ -69,7 +91,7 @@ function MisProyectos() {
         </Button>
       </div>
 
-      <div className="mt-6 flex gap-2">
+      <div className="mt-6 flex flex-wrap gap-2">
         {FILTROS.map((f) => (
           <button
             key={f.id}
@@ -101,38 +123,50 @@ function MisProyectos() {
       ) : (
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {lista.map((p) => (
-            <Link
-              key={p.id}
-              to="/app/proyecto/$id"
-              params={{ id: p.id }}
-              className="surface-card overflow-hidden transition hover:shadow-lift"
-            >
-              <div className="flex aspect-video items-center justify-center bg-secondary">
-                {p.miniatura_url ? (
-                  <img src={p.miniatura_url} alt="" className="h-full w-full object-cover" />
-                ) : p.tipo === "video" ? (
-                  <Camera className="h-8 w-8 text-muted-foreground" />
-                ) : (
-                  <Sparkles className="h-8 w-8 text-muted-foreground" />
-                )}
-              </div>
-              <div className="p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="truncate font-medium">{p.nombre}</p>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${ESTADO[p.estado].clase}`}>
-                    {ESTADO[p.estado].etiqueta}
-                  </span>
+            <div key={p.id} className="surface-card relative overflow-hidden transition hover:shadow-lift">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  eliminar(p.id, p.nombre);
+                }}
+                disabled={borrando === p.id}
+                aria-label={`Eliminar ${p.nombre}`}
+                className="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-destructive disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+              <Link to="/app/proyecto/$id" params={{ id: p.id }} className="block">
+                <div className="flex aspect-video items-center justify-center bg-secondary">
+                  {p.miniatura_url ? (
+                    <img src={p.miniatura_url} alt="" className="h-full w-full object-cover" />
+                  ) : p.tipo === "video" ? (
+                    <Camera className="h-8 w-8 text-muted-foreground" />
+                  ) : p.tipo === "plano2d" ? (
+                    <MapIcon className="h-8 w-8 text-muted-foreground" />
+                  ) : (
+                    <Sparkles className="h-8 w-8 text-muted-foreground" />
+                  )}
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {p.tipo === "video" ? "Vídeo" : "Tour 3D"} ·{" "}
-                  {new Date(p.creado_en).toLocaleDateString("es-ES", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </p>
-              </div>
-            </Link>
+                <div className="p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="truncate font-medium">{p.nombre}</p>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${ESTADO[p.estado].clase}`}>
+                      {ESTADO[p.estado].etiqueta}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {TIPO_LABEL[p.tipo]} ·{" "}
+                    {new Date(p.creado_en).toLocaleDateString("es-ES", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </p>
+                </div>
+              </Link>
+            </div>
           ))}
         </div>
       )}
