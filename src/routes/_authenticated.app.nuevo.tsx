@@ -262,13 +262,27 @@ function NuevoProyecto() {
         const f = archivos[i]!;
         const limpio = f.name.replace(/[^a-zA-Z0-9._-]/g, "_");
         const path = `${user.id}/${proyecto.id}/${Date.now()}_${limpio}`;
-        const { error: errUp } = await supabase.storage.from("uploads").upload(path, f);
-        if (errUp)
-          throw new Error(
-            `No hemos podido subir ${f.name}. Detalle: ${errUp.message ?? JSON.stringify(errUp)}`,
-          );
-        entradas.push({ path, nombre: f.name });
-        setProgreso(Math.round(((i + 1) / archivos.length) * 100));
+        const esEscaneoGrande =
+          tipo === "tour3d" && archivos.length === 1 && !f.name.toLowerCase().endsWith(".glb");
+
+        if (esEscaneoGrande) {
+          try {
+            await subirResumable(f, "uploads", path, (pct) => setProgreso(pct));
+          } catch (err) {
+            const detalle = err instanceof Error ? err.message : JSON.stringify(err);
+            throw new Error(`No hemos podido subir ${f.name}. Detalle: ${detalle}`);
+          }
+          entradas.push({ path, nombre: f.name });
+          setProgreso(100);
+        } else {
+          const { error: errUp } = await supabase.storage.from("uploads").upload(path, f);
+          if (errUp)
+            throw new Error(
+              `No hemos podido subir ${f.name}. Detalle: ${errUp.message ?? JSON.stringify(errUp)}`,
+            );
+          entradas.push({ path, nombre: f.name });
+          setProgreso(Math.round(((i + 1) / archivos.length) * 100));
+        }
       }
 
       await supabase.from("projects").update({ archivos_entrada: entradas }).eq("id", proyecto.id);
