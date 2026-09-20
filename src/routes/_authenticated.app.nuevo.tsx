@@ -38,7 +38,7 @@ async function subirResumable(
   objectName: string,
   onProgreso: (pct: number) => void,
 ): Promise<void> {
-  const { tus } = await import("tus-js-client");
+  const tus = await import("tus-js-client");
   const { data: sesion } = await supabase.auth.getSession();
   const token = sesion.session?.access_token;
   if (!token) throw new Error("Tu sesión ha caducado. Vuelve a iniciar sesión.");
