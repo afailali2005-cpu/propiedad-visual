@@ -351,17 +351,17 @@ export const publicarTour = createServerFn({ method: "POST" })
       const archivo = (proyecto.archivos_entrada ?? [])[0];
       if (!archivo?.path) throw new Error("El proyecto no tiene archivo de escaneo.");
 
-      const { data: blob, error: errDescarga } = await supabase.storage
+      const { data: firmada, error: errFirma } = await supabase.storage
         .from("uploads")
-        .download(archivo.path);
-      if (errDescarga || !blob) throw new Error("No hemos podido leer el archivo del escaneo.");
+        .createSignedUrl(archivo.path, 3600);
+      if (errFirma || !firmada?.signedUrl) throw new Error("No hemos podido leer el archivo del escaneo.");
 
-      const { publicarSplat } = await import("@/lib/supersplat.server");
-      const url = await publicarSplat(
-        await blob.arrayBuffer(),
-        archivo.nombre ?? "escaneo.ply",
-        proyecto.nombre,
-      );
+      const headRes = await fetch(firmada.signedUrl, { method: "HEAD" });
+      const tamanoBytes = Number(headRes.headers.get("content-length") ?? 0);
+      if (!tamanoBytes) throw new Error("No hemos podido determinar el tamaño del archivo.");
+
+      const { publicarSplatDesdeUrl } = await import("@/lib/supersplat.server");
+      const url = await publicarSplatDesdeUrl(firmada.signedUrl, tamanoBytes, archivo.nombre ?? "escaneo.ply", proyecto.nombre);
 
       await supabase
         .from("projects")
