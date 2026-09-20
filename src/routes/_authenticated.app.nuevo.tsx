@@ -222,7 +222,10 @@ function NuevoProyecto() {
         const limpio = f.name.replace(/[^a-zA-Z0-9._-]/g, "_");
         const path = `${user.id}/${proyecto.id}/${Date.now()}_${limpio}`;
         const { error: errUp } = await supabase.storage.from("uploads").upload(path, f);
-        if (errUp) throw new Error(`No hemos podido subir ${f.name}.`);
+        if (errUp)
+          throw new Error(
+            `No hemos podido subir ${f.name}. Detalle: ${errUp.message ?? JSON.stringify(errUp)}`,
+          );
         entradas.push({ path, nombre: f.name });
         setProgreso(Math.round(((i + 1) / archivos.length) * 100));
       }
@@ -236,7 +239,10 @@ function NuevoProyecto() {
         const f = archivos[0]!;
         const path = `${user.id}/${proyecto.id}_${Date.now()}.glb`;
         const { error: errPub } = await supabase.storage.from("modelos-3d").upload(path, f);
-        if (errPub) throw new Error("No hemos podido subir el modelo.");
+        if (errPub)
+          throw new Error(
+            `No hemos podido subir el modelo. Detalle: ${errPub.message ?? JSON.stringify(errPub)}`,
+          );
         const { data: pub } = supabase.storage.from("modelos-3d").getPublicUrl(path);
         await supabase
           .from("projects")
@@ -286,7 +292,10 @@ function NuevoProyecto() {
         const limpio = f.name.replace(/[^a-zA-Z0-9._-]/g, "_");
         const path = `${user.id}/${proyecto.id}/${Date.now()}_${limpio}`;
         const { error: errUp } = await supabase.storage.from("uploads").upload(path, f);
-        if (errUp) throw new Error(`No hemos podido subir ${f.name}.`);
+        if (errUp)
+          throw new Error(
+            `No hemos podido subir ${f.name}. Detalle: ${errUp.message ?? JSON.stringify(errUp)}`,
+          );
         entradas.push({ path, nombre: f.name });
         setProgreso(Math.round(((i + 1) / archivosEditor.length) * 100));
       }
@@ -330,7 +339,10 @@ function NuevoProyecto() {
       const limpio = archivoPlano.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       const path = `${user.id}/${proyecto.id}/${Date.now()}_${limpio}`;
       const { error: errUp } = await supabase.storage.from("uploads").upload(path, archivoPlano);
-      if (errUp) throw new Error("No hemos podido subir la imagen.");
+      if (errUp)
+        throw new Error(
+          `No hemos podido subir la imagen. Detalle: ${errUp.message ?? JSON.stringify(errUp)}`,
+        );
       await supabase
         .from("projects")
         .update({ archivos_entrada: [{ path, nombre: archivoPlano.name }] })
